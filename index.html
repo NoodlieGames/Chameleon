@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>لعبة الكامليون</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Cairo', sans-serif; background-color: #0f172a; color: #f8fafc; }
+        .glass { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.1); }
+    </style>
+</head>
+<body class="min-h-screen flex items-center justify-center p-4">
+
+    <div id="app" class="glass rounded-3xl p-8 w-full max-w-md shadow-2xl text-center space-y-6">
+        <h1 class="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-green-400 to-blue-500 mb-2">لعبة الكامليون 🦎</h1>
+        <p class="text-gray-400 text-sm mb-6">اكتشف الكذاب بينكم</p>
+
+        <div id="auth-screen">
+            <p class="text-xl animate-pulse text-yellow-400">جاري الاتصال...</p>
+        </div>
+
+        <div id="home-screen" class="hidden space-y-4">
+            <input type="text" id="player-name" placeholder="أدخل اسمك" class="w-full bg-slate-800 text-white rounded-xl p-4 border border-slate-700 focus:outline-none focus:border-green-500">
+            <div class="grid grid-cols-2 gap-4">
+                <button id="create-room-btn" class="bg-green-600 hover:bg-green-500 text-white font-bold py-3 px-4 rounded-xl transition shadow-lg">إنشاء غرفة</button>
+                <div class="space-y-2">
+                    <input type="text" id="room-code-input" placeholder="كود الغرفة" class="w-full bg-slate-800 text-white rounded-xl p-3 border border-slate-700 focus:outline-none focus:border-blue-500 text-center uppercase">
+                    <button id="join-room-btn" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 px-4 rounded-xl transition shadow-lg">انضمام</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="lobby-screen" class="hidden space-y-6">
+            <div class="bg-slate-800 rounded-xl p-4 border border-slate-700">
+                <p class="text-sm text-gray-400">كود الغرفة الخاص بك:</p>
+                <p id="display-room-code" class="text-4xl font-black tracking-widest text-green-400 my-2"></p>
+                <p class="text-xs text-gray-500">شارك هذا الكود مع أصدقائك</p>
+            </div>
+            
+            <div class="text-right">
+                <h3 class="font-bold text-lg mb-2 text-blue-400">اللاعبين:</h3>
+                <ul id="players-list" class="space-y-2 bg-slate-800/50 p-4 rounded-xl min-h-[100px]"></ul>
+            </div>
+
+            <button id="start-game-btn" class="hidden w-full bg-gradient-to-r from-green-500 to-green-700 hover:from-green-400 hover:to-green-600 text-white font-black text-xl py-4 rounded-xl transition shadow-[0_0_15px_rgba(34,197,94,0.5)]">بدء اللعبة</button>
+        </div>
+
+        <div id="game-screen" class="hidden space-y-6">
+            <div id="role-display" class="bg-slate-800 rounded-2xl p-6 border-2 border-dashed"></div>
+            
+            <div class="text-right bg-slate-800/50 p-4 rounded-xl">
+                <h3 class="font-bold text-lg mb-2 text-purple-400">اللاعبين:</h3>
+                <ul id="game-players-list" class="space-y-2 text-sm"></ul>
+            </div>
+
+            <button id="end-game-btn" class="hidden w-full bg-red-600 hover:bg-red-500 text-white font-bold py-3 rounded-xl transition">إنهاء الجيم 🛑</button>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, onSnapshot, updateDoc, getDoc, collection } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        const firebaseConfig = {
+  apiKey: "AIzaSyCqw70RA5daCVYQpQYrQmCCFNCetLLU9-Y",
+  authDomain: "chameleonarabic.firebaseapp.com",
+  databaseURL: "https://chameleonarabic-default-rtdb.firebaseio.com",
+  projectId: "chameleonarabic",
+  storageBucket: "chameleonarabic.firebasestorage.app",
+  messagingSenderId: "792206436948",
+  appId: "1:792206436948:web:5caf52eae138d116a2dbc1"
+};
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+        const wordsDb = {
+            "أكل": ["شاورما", "برجر", "بيتزا", "سوشي", "كبسة", "فلافل", "اندومي", "بطاطس", "كشري", "بروستد"],
+            "حيوانات": ["أسد", "قطة", "كلب", "قرد", "تمساح", "فيل", "زرافة", "ثعبان", "صقر", "سلحفاة"],
+            "أماكن": ["مدرسة", "مستشفى", "مقهى", "بحر", "سينما", "مول", "ملعب", "مطار", "حديقة", "مسجد"],
+            "أشياء بالبيت": ["تلفزيون", "ثلاجة", "مكيف", "سرير", "كنبة", "مراية", "ساعة", "شاحن", "مغسلة", "دولاب"]
+        };
+
+        const ui = {
+            auth: document.getElementById('auth-screen'),
+            home: document.getElementById('home-screen'),
+            lobby: document.getElementById('lobby-screen'),
+            game: document.getElementById('game-screen'),
+            playerName: document.getElementById('player-name'),
+            roomCodeInput: document.getElementById('room-code-input'),
+            createBtn: document.getElementById('create-room-btn'),
+            joinBtn: document.getElementById('join-room-btn'),
+            displayCode: document.getElementById('display-room-code'),
+            playersList: document.getElementById('players-list'),
+            startBtn: document.getElementById('start-game-btn'),
+            roleDisplay: document.getElementById('role-display'),
+            gamePlayersList: document.getElementById('game-players-list'),
+            endBtn: document.getElementById('end-game-btn')
+        };
+
+        function showScreen(screenId) {
+            ['auth', 'home', 'lobby', 'game'].forEach(s => ui[s].classList.add('hidden'));
+            ui[screenId].classList.remove('hidden');
+        }
+
+        function generateCode() {
+            return Math.random().toString(36).substring(2, 6).toUpperCase();
+        }
+
+        async function initAuth() {
+            try {
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                } else {
+                    await signInAnonymously(auth);
+                }
+            } catch (error) {
+                ui.auth.innerHTML = `<p class="text-red-500">حدث خطأ، يرجى المحاولة مرة أخرى</p>`;
+            }
+        }
+
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                currentUser = user;
+                showScreen('home');
+            }
+        });
+
+        initAuth();
+
+        ui.createBtn.onclick = async () => {
+            const name = ui.playerName.value.trim() || "لاعب مجهول";
+            const roomId = generateCode();
+            currentRoomId = roomId;
+            isHost = true;
+
+            const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'rooms', roomId);
+            
+            await setDoc(roomRef, {
+                status: 'waiting',
+                host: currentUser.uid,
+                players: [{ id: currentUser.uid, name: name }],
+                category: '',
+                word: '',
+                chameleonId: ''
+            });
+
+            listenToRoom(roomId);
+            showScreen('lobby');
+            ui.displayCode.innerText = roomId;
+            ui.startBtn.classList.remove('hidden');
+            ui.endBtn.classList.remove('hidden');
+        };
+
+        ui.joinBtn.onclick = async () => {
+            const name = ui.playerName.value.trim() || "لاعب مجهول";
+            const roomId = ui.roomCodeInput.value.trim().toUpperCase();
+            if (!roomId) return;
+
+            const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'rooms', roomId);
+            const roomSnap = await getDoc(roomRef);
+
+            if (roomSnap.exists()) {
+                const data = roomSnap.data();
+                if(data.status !== 'waiting') return;
+                
+                let players = data.players;
+                if (!players.find(p => p.id === currentUser.uid)) {
+                    players.push({ id: currentUser.uid, name: name });
+                    await updateDoc(roomRef, { players });
+                }
+                
+                currentRoomId = roomId;
+                isHost = false;
+                listenToRoom(roomId);
+                showScreen('lobby');
+                ui.displayCode.innerText = roomId;
+                ui.startBtn.classList.add('hidden');
+                ui.endBtn.classList.add('hidden');
+            }
+        };
+
+        function listenToRoom(roomId) {
+            if (unsubscribeRoom) unsubscribeRoom();
+            
+            const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'rooms', roomId);
+            
+            unsubscribeRoom = onSnapshot(roomRef, (snap) => {
+                if (!snap.exists()) {
+                    showScreen('home');
+                    return;
+                }
+
+                const data = snap.data();
+                updateLobbyUI(data);
+
+                if (data.status === 'playing') {
+                    showScreen('game');
+                    updateGameUI(data);
+                } else if (data.status === 'waiting' && ui.game.classList.contains('hidden') === false) {
+                    showScreen('lobby');
+                }
+            }, (error) => {});
+        }
+
+        function updateLobbyUI(data) {
+            ui.playersList.innerHTML = '';
+            data.players.forEach(p => {
+                const li = document.createElement('li');
+                li.className = 'flex items-center gap-2 text-lg text-white';
+                li.innerHTML = `<span>👾</span> ${p.name} ${p.id === data.host ? '<span class="text-xs bg-yellow-500/20 text-yellow-300 px-2 py-1 rounded">المضيف</span>' : ''}`;
+                ui.playersList.appendChild(li);
+            });
+        }
+
+        function updateGameUI(data) {
+            const isChameleon = currentUser.uid === data.chameleonId;
+            
+            if (isChameleon) {
+                ui.roleDisplay.className = 'bg-red-900/40 rounded-2xl p-6 border-2 border-red-500 shadow-[0_0_20px_rgba(239,68,68,0.3)] animate-pulse';
+                ui.roleDisplay.innerHTML = `
+                    <h2 class="text-3xl font-black text-red-500 mb-2">أنت الكامليون! 🤫</h2>
+                    <p class="text-xl text-white">التصنيف هو: <span class="text-yellow-400 font-bold">${data.category}</span></p>
+                    <p class="mt-4 text-sm text-red-300">حاول التظاهر بأنك تعرف الكلمة، واستنتجها من تلميحات الآخرين لتجنب كشفك.</p>
+                `;
+            } else {
+                ui.roleDisplay.className = 'bg-green-900/40 rounded-2xl p-6 border-2 border-green-500 shadow-[0_0_20px_rgba(34,197,94,0.3)]';
+                ui.roleDisplay.innerHTML = `
+                    <h2 class="text-2xl font-bold text-green-400 mb-2">دورك هو اكتشاف الكامليون 🕵️‍♂️</h2>
+                    <p class="text-lg text-white">التصنيف: <span class="text-yellow-400">${data.category}</span></p>
+                    <p class="text-2xl mt-2 text-white">الكلمة السرية: <span class="font-black text-blue-400 bg-blue-900/50 px-3 py-1 rounded">${data.word}</span></p>
+                    <p class="mt-4 text-sm text-green-300">قدم تلميحاً بكلمة واحدة تدل على الكلمة السرية دون أن توضحها بشكل كامل للكامليون!</p>
+                `;
+            }
+
+            ui.gamePlayersList.innerHTML = '';
+            data.players.forEach(p => {
+                const li = document.createElement('li');
+                li.className = 'text-white border-b border-slate-700 py-2';
+                li.innerText = p.name;
+                ui.gamePlayersList.appendChild(li);
+            });
+        }
+
+        ui.startBtn.onclick = async () => {
+            if (!isHost || !currentRoomId) return;
+
+            const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'rooms', currentRoomId);
+            const snap = await getDoc(roomRef);
+            const data = snap.data();
+
+            if (data.players.length < 2) return;
+
+            const categories = Object.keys(wordsDb);
+            const randomCategory = categories[Math.floor(Math.random() * categories.length)];
+            const words = wordsDb[randomCategory];
+            const randomWord = words[Math.floor(Math.random() * words.length)];
+            
+            const randomChameleonIndex = Math.floor(Math.random() * data.players.length);
+            const chameleonId = data.players[randomChameleonIndex].id;
+
+            await updateDoc(roomRef, {
+                status: 'playing',
+                category: randomCategory,
+                word: randomWord,
+                chameleonId: chameleonId
+            });
+        };
+
+        ui.endBtn.onclick = async () => {
+            if (!isHost || !currentRoomId) return;
+            const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'rooms', currentRoomId);
+            await updateDoc(roomRef, { status: 'waiting' });
+        };
+    </script>
+</body>
+</html>

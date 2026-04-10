@@ -64,18 +64,26 @@
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, setDoc, onSnapshot, updateDoc, getDoc, collection } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        const firebaseConfig = {
-  apiKey: "AIzaSyCqw70RA5daCVYQpQYrQmCCFNCetLLU9-Y",
-  authDomain: "chameleonarabic.firebaseapp.com",
-  databaseURL: "https://chameleonarabic-default-rtdb.firebaseio.com",
-  projectId: "chameleonarabic",
-  storageBucket: "chameleonarabic.firebasestorage.app",
-  messagingSenderId: "792206436948",
-  appId: "1:792206436948:web:5caf52eae138d116a2dbc1"
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
+    apiKey: "AIzaSyCqw70RA5daCVYQpQYrQmCCFNCetLLU9-Y",
+     authDomain: "chameleonarabic.firebaseapp.com",
+     databaseURL: "https://chameleonarabic-default-rtdb.firebaseio.com",
+    projectId: "chameleonarabic",
+     storageBucket: "chameleonarabic.firebasestorage.app",
+     messagingSenderId: "792206436948",
+     appId: "1:792206436948:web:5caf52eae138d116a2dbc1"
 };
+        
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'chameleon-game';
 
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
+        let currentUser = null;
+        let currentRoomId = null;
+        let isHost = false;
+        let unsubscribeRoom = null;
+
         const wordsDb = {
             "أكل": ["شاورما", "برجر", "بيتزا", "سوشي", "كبسة", "فلافل", "اندومي", "بطاطس", "كشري", "بروستد"],
             "حيوانات": ["أسد", "قطة", "كلب", "قرد", "تمساح", "فيل", "زرافة", "ثعبان", "صقر", "سلحفاة"],
